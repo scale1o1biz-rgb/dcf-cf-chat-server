@@ -165,6 +165,21 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', ts: Date.now() });
 });
 
+app.get('/wallet/balance', async (_req, res) => {
+  try {
+    const sol = await fetchSolBalance();
+    res.json({ sol, timestamp: Date.now(), address: HOUSE_WALLET, source: 'solana-rpc' });
+  } catch (err) {
+    // Fallback to last known snapshot
+    const last = walletSnapshots[walletSnapshots.length - 1];
+    if (last) {
+      res.json({ sol: last.sol, timestamp: last.timestamp, address: HOUSE_WALLET, source: 'cache' });
+    } else {
+      res.status(503).json({ error: err.message });
+    }
+  }
+});
+
 app.get('/wallet/stats', (_req, res) => {
   const snaps = walletSnapshots;
   const current = snaps[snaps.length - 1] || null;
