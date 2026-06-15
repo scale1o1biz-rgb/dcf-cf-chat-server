@@ -165,6 +165,28 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', ts: Date.now() });
 });
 
+app.get('/wallet/stats', (_req, res) => {
+  const snaps = walletSnapshots;
+  const current = snaps[snaps.length - 1] || null;
+  const prev1h  = snaps.length >= 2 ? snaps[snaps.length - 2] : null;
+  const oldest  = snaps.length >= 1 ? snaps[0] : null;
+
+  const sols = snaps.map(s => s.sol);
+  res.json({
+    address:    HOUSE_WALLET,
+    solscanUrl: SOLSCAN_LINK,
+    current:    current ? current.sol : null,
+    prev1h:     prev1h  ? prev1h.sol  : null,
+    oldest:     oldest  ? oldest.sol  : null,
+    high:       sols.length ? Math.max(...sols) : null,
+    low:        sols.length ? Math.min(...sols)  : null,
+    avg:        sols.length ? sols.reduce((a, b) => a + b, 0) / sols.length : null,
+    snapshots:  snaps,
+    dataPoints: snaps.length,
+    lastChecked: current ? current.timestamp : null,
+  });
+});
+
 app.get('/history', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit || '30'), 50);
   res.json({ messages: messageHistory.slice(-limit) });
