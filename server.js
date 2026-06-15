@@ -423,6 +423,92 @@ setInterval(() => {
   if (cleaned > 0) log('info', `Cleanup: removed ${cleaned} stale rate-limit entries`);
 }, CLEANUP_INTERVAL_MS);
 
+
+// ================================================================
+// HOUSE WALLET TRACKER
+// ================================================================
+const HOUSE_WALLET    = 'EWBFhigrnx6q5MMaGgxcg22dZtqTcZwiut8ZG7QCAFo';
+const SOLSCAN_LINK    = `https://solscan.io/account/${HOUSE_WALLET}`;
+const SOLANA_RPC      = 'https://api.mainnet-beta.solana.com';
+const WALLET_ROOM     = 'degencoinflip-lobby';
+const WALLET_INTERVAL = 60 * 60 * 1000; // 1 hour
+
+// Stores up to 24 hourly snapshots: { sol, timestamp }
+const walletSnapshots = [];
+
+async function fetchSolBalance() {
+  const res = await fetch(SOLANA_RPC, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getBalance',
+      params: [HOUSE_WALLET],
+    }),
+    signal: AbortSignal.timeout(12_000),
+  });
+  if (!res.ok) throw new Error(`Solana RPC HTTP ${res.status}`);
+  const json = await res.json();
+  if (json.error) throw new Error(`Solana RPC: ${json.error.message}`);
+  return json.result.value / 1_000_000_000; // lamports to SOL
+}
+
+function formatSol(n) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function broadcastWalletMsg(text) {
+  const msg = {
+    id:        genId(),
+    username:  'Wallet Bot',
+    text,
+    timestamp: Date.now(),
+    reactions: {},
+    isBot:     true,
+  };
+  messageHistory.push(msg);
+  if (messageHistory.length > MAX_MSG_HISTORY) messageHistory.shift();
+  io.to(WALLET_ROOM).emit('message', msg);
+}
+
+async function checkWallet(isInitial) {
+  try {
+    const sol  = await fetchSolBalance();
+    const prev = walletSnapshots[walletSnapshots.length - 1] || null;
+
+    walletSnapshots.push({ sol, timestamp: Date.now() });
+    if (walletSnapshots.length > 24) walletSnapshots.shift();
+
+    if (isInitial) {
+      broadcastWalletMsg(
+        `House Wallet Tracker online\nCurrent: ${formatSol(sol)} SOL\nUpdates every hour. ${SOLSCAN_LINK}`
+      );
+    } else {
+      const change    = prev ? sol - prev.sol : null;
+      const arrow     = change === null ? '' : change >= 0 ? ' UP' : ' DOWN';
+      const changeStr = change !== null
+        ? ` (${change >= 0 ? '+' : ''}${formatSol(change)} SOL${arrow})`
+        : '';
+      const prevStr   = prev ? formatSol(prev.sol) + ' SOL' : 'N/A';
+
+      broadcastWalletMsg(
+        `House Wallet Update\nNow: ${formatSol(sol)} SOL${changeStr}\n1hr ago: ${prevStr}\n${SOLSCAN_LINK}`
+      );
+    }
+
+    log('info', `Wallet check: ${formatSol(sol)} SOL`);
+  } catch (err) {
+    log('error', `Wallet tracker: ${err.message}`);
+  }
+}
+
+// Wait 8s for socket.io to be ready, then run immediately + every hour
+setTimeout(() => {
+  checkWallet(true);
+  setInterval(() => checkWallet(false), WALLET_INTERVAL);
+}, 8_000);
+
 // ================================================================
 // START
 // ================================================================
