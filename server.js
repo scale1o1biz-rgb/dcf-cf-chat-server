@@ -300,21 +300,6 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // ── COMMANDS ──
-    if (text.toLowerCase() === '/house') {
-      // Prevent spam — 30s cooldown on the command globally
-      const now = Date.now();
-      if (now - lastWalletCommandAt < 30_000) {
-        const wait = Math.ceil((30_000 - (now - lastWalletCommandAt)) / 1000);
-        socket.emit('error', { message: `Wallet command cooldown — wait ${wait}s` });
-      } else {
-        lastWalletCommandAt = now;
-        log('info', `/house command used by ${currentUser}`);
-        checkWallet(false);
-      }
-      return; // Never broadcast the command text
-    }
-
     // Rate limit
     const rl = checkRateLimit(socket.id);
     if (!rl.allowed) {
@@ -526,30 +511,10 @@ function broadcastWalletMsg(text) {
 
 async function checkWallet(isInitial) {
   try {
-    const sol  = await fetchSolBalance();
-    const prev = walletSnapshots[walletSnapshots.length - 1] || null;
-
+    const sol = await fetchSolBalance();
     walletSnapshots.push({ sol, timestamp: Date.now() });
     if (walletSnapshots.length > 24) walletSnapshots.shift();
-
-    if (isInitial) {
-      broadcastWalletMsg(
-        `House Wallet Tracker online\nCurrent: ${formatSol(sol)} SOL\nUpdates every hour. ${SOLSCAN_LINK}`
-      );
-    } else {
-      const change    = prev ? sol - prev.sol : null;
-      const arrow     = change === null ? '' : change >= 0 ? ' UP' : ' DOWN';
-      const changeStr = change !== null
-        ? ` (${change >= 0 ? '+' : ''}${formatSol(change)} SOL${arrow})`
-        : '';
-      const prevStr   = prev ? formatSol(prev.sol) + ' SOL' : 'N/A';
-
-      broadcastWalletMsg(
-        `House Wallet Update\nNow: ${formatSol(sol)} SOL${changeStr}\n1hr ago: ${prevStr}\n${SOLSCAN_LINK}`
-      );
-    }
-
-    log('info', `Wallet check: ${formatSol(sol)} SOL`);
+    log('info', `Wallet snapshot: ${formatSol(sol)} SOL (${walletSnapshots.length} recorded)`);
   } catch (err) {
     log('error', `Wallet tracker: ${err.message}`);
   }
