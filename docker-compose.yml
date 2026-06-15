@@ -1,0 +1,32 @@
+version: '3.9'
+
+services:
+  dcf-chat-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dcf-cf-chat
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${PORT:-3000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://degencoinflip.com}
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
+    name: dcf-chat-network
