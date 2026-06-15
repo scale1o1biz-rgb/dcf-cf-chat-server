@@ -263,6 +263,21 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // ── COMMANDS ──
+    if (text.toLowerCase() === '/house') {
+      // Prevent spam — 30s cooldown on the command globally
+      const now = Date.now();
+      if (now - lastWalletCommandAt < 30_000) {
+        const wait = Math.ceil((30_000 - (now - lastWalletCommandAt)) / 1000);
+        socket.emit('error', { message: `Wallet command cooldown — wait ${wait}s` });
+      } else {
+        lastWalletCommandAt = now;
+        log('info', `/house command used by ${currentUser}`);
+        checkWallet(false);
+      }
+      return; // Never broadcast the command text
+    }
+
     // Rate limit
     const rl = checkRateLimit(socket.id);
     if (!rl.allowed) {
